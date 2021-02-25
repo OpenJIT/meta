@@ -59,6 +59,16 @@ constexpr function_helper<Ret(Args...) const>
 to_function_helper(Ret(Class:: *)(Args...) const);
 
 
+template<typename Ret, typename... Args, typename Class>
+constexpr function_helper<Ret(Args...)>
+to_function_helper(Ret(Class:: *)(Args...) &);
+
+
+template<typename Ret, typename... Args, typename Class>
+constexpr function_helper<Ret(Args...) const>
+to_function_helper(Ret(Class:: *)(Args...) const &);
+
+
 template<typename Ret, typename... Args>
 constexpr function_helper<Ret(Args...)>
 to_function_helper(Ret(*)(Args...));
@@ -471,6 +481,40 @@ public:
             [](const void *instance) -> any {
                 auto tptr = const_cast<To*>(static_cast<const To*>(instance));
                 return any(std::ref(*tptr));
+            },
+            []() noexcept -> meta::deref {
+                return &node;
+            }
+        };
+
+        assert((!internal::type_info<Type>::template deref<To>));
+        internal::type_info<Type>::template deref<To> = &node;
+        type->deref = &node;
+
+        return *this;
+    }
+
+    /**
+     * @brief Assigns a meta dereference function to a meta type.
+     *
+     * The given type must be such that an instance of the reflected type can be
+     * dereferenced to it.
+     *
+     * @tparam To Type to dereference to in the meta dereference function assigned to the meta type.
+     * @return A meta factory for the parent type.
+     */
+    template<typename To>
+    factory indirect() noexcept {
+        using deref_helper = decltype(*std::declval<const Type>());
+        static_assert(std::is_convertible_v<deref_helper, const To&>);
+        auto * const type = internal::type_info<Type>::resolve();
+
+        static internal::deref_node node{
+            type,
+            &internal::type_info<To>::resolve,
+            [](const void *instance) -> any {
+                auto tref = const_cast<To&>(static_cast<const To&>(**static_cast<const Type*>(instance)));
+                return any(std::ref(*tref));
             },
             []() noexcept -> meta::deref {
                 return &node;
