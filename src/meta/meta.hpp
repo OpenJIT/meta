@@ -19,6 +19,7 @@ class handle;
 class prop;
 class base;
 class conv;
+class deref;
 class ctor;
 class dtor;
 class data;
@@ -66,6 +67,14 @@ struct conv_node {
 };
 
 
+struct deref_node {
+    type_node * const parent;
+    type_node *(* const ref)() noexcept;
+    any(* const convert)(const void *);
+    deref(* const clazz)() noexcept;
+};
+
+    
 struct ctor_node {
     using size_type = std::size_t;
     ctor_node ** const underlying;
@@ -141,6 +150,7 @@ struct type_node {
     type(* const clazz)() noexcept;
     base_node *base{nullptr};
     conv_node *conv{nullptr};
+    deref_node *deref{nullptr};
     ctor_node *ctor{nullptr};
     dtor_node *dtor{nullptr};
     data_node *data{nullptr};
@@ -163,6 +173,9 @@ struct info_node<Type> {
 
     template<typename>
     inline static conv_node *conv = nullptr;
+
+    template<typename>
+    inline static deref_node *deref = nullptr;
 
     template<typename>
     inline static ctor_node *ctor = nullptr;
@@ -968,6 +981,81 @@ inline bool operator!=(const conv &lhs, const conv &rhs) noexcept {
 
 
 /**
+ * @brief Meta dereference function object.
+ *
+ * A meta dereference function is an opaque container for a dereference function
+ * to be used to dereference a given instance to its pointed-to type.
+ */
+class deref {
+    /*! @brief A meta factory is allowed to create meta objects. */
+    template<typename> friend class factory;
+
+    deref(const internal::deref_node *curr) noexcept
+        : node{curr}
+    {}
+
+public:
+    /*! @brief Default constructor. */
+    deref() noexcept
+        : node{nullptr}
+    {}
+
+    /**
+     * @brief Returns the meta type to which a meta dereference function belongs.
+     * @return The meta type to which the meta dereference function belongs.
+     */
+    inline meta::type parent() const noexcept;
+
+    /**
+     * @brief Returns the meta type of a given meta dereference function.
+     * @return The meta type of the meta dereference function.
+     */
+    inline meta::type type() const noexcept;
+
+    /**
+     * @brief Dereference an instance to a given type.
+     * @param instance The instance to dereference.
+     * @return An opaque pointer to the instance to dereference.
+     */
+    any convert(const void *instance) const noexcept {
+        return node->convert(instance);
+    }
+
+    /**
+     * @brief Returns true if a meta object is valid, false otherwise.
+     * @return True if the meta object is valid, false otherwise.
+     */
+    explicit operator bool() const noexcept {
+        return node;
+    }
+
+    /**
+     * @brief Checks if two meta objects refer to the same node.
+     * @param other The meta object with which to compare.
+     * @return True if the two meta objects refer to the same node, false
+     * otherwise.
+     */
+    bool operator==(const deref &other) const noexcept {
+        return node == other.node;
+    }
+
+private:
+    const internal::deref_node *node;
+};
+
+
+/**
+ * @brief Checks if two meta objects refer to the same node.
+ * @param lhs A meta object, either valid or not.
+ * @param rhs A meta object, either valid or not.
+ * @return True if the two meta objects refer to the same node, false otherwise.
+ */
+inline bool operator!=(const deref &lhs, const deref &rhs) noexcept {
+    return !(lhs == rhs);
+}
+
+
+/**
  * @brief Meta constructor object.
  *
  * A meta constructor is an opaque container for a function to be used to
@@ -1723,6 +1811,16 @@ public:
     }
 
     /**
+     * @brief Returns the meta dereference function associated with a given type.
+     *
+     * @return The meta dereferencefunction associated with the given type, if
+     * any.
+     */
+    meta::deref deref() const noexcept {
+        return node->deref? node->deref->clazz() : deref();
+    }
+
+    /**
      * @brief Iterates all the meta constructors of a meta type.
      * @tparam Op Type of the function object to invoke.
      * @param op A valid function object.
@@ -1973,6 +2071,16 @@ inline meta::type conv::parent() const noexcept {
 
 
 inline meta::type conv::type() const noexcept {
+    return node->ref()->clazz();
+}
+
+
+inline meta::type deref::parent() const noexcept {
+    return node->parent->clazz();
+}
+
+
+inline meta::type deref::type() const noexcept {
     return node->ref()->clazz();
 }
 

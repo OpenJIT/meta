@@ -418,6 +418,75 @@ public:
     /**
      * @brief Assigns a meta conversion function to a meta type.
      *
+     * The given type must be such that an instance of the reflected type can be
+     * converted to it.
+     *
+     * @tparam To Type of the conversion function to assign to the meta type.
+     * @return A meta factory for the parent type.
+     */
+    template<typename To>
+    factory scalar_conv() noexcept {
+        static_assert(std::is_scalar_v<Type>);
+        static_assert(std::is_scalar_v<To>);
+        auto * const type = internal::type_info<Type>::resolve();
+
+        static internal::conv_node node{
+            &internal::type_info<Type>::template conv<To>,
+            type,
+            nullptr,
+            &internal::type_info<To>::resolve,
+            [](const void *instance) -> any {
+                return static_cast<To>(*static_cast<const Type *>(instance));
+            },
+            []() noexcept -> meta::conv {
+                return &node;
+            }
+        };
+
+        node.next = type->conv;
+        assert((!internal::type_info<Type>::template conv<To>));
+        internal::type_info<Type>::template conv<To> = &node;
+        type->conv = &node;
+
+        return *this;
+    }
+
+    /**
+     * @brief Assigns a meta dereference function to a meta type.
+     *
+     * The given type must be such that an instance of the reflected type can be
+     * dereferenced to it.
+     *
+     * @tparam To Type to dereference to in the meta dereference function assigned to the meta type.
+     * @return A meta factory for the parent type.
+     */
+    template<typename To>
+    factory deref() noexcept {
+        static_assert(std::is_convertible_v<Type, To&>);
+        auto * const type = internal::type_info<Type>::resolve();
+
+        static internal::deref_node node{
+            type,
+            &internal::type_info<To>::resolve,
+            [](const void *instance) -> any {
+                auto tptr = const_cast<To*>(static_cast<const To*>(instance));
+                return any(std::ref(*tptr));
+            },
+            []() noexcept -> meta::deref {
+                return &node;
+            }
+        };
+
+        assert((!internal::type_info<Type>::template deref<To>));
+        internal::type_info<Type>::template deref<To> = &node;
+        type->deref = &node;
+
+        return *this;
+    }
+
+    /**
+     * @brief Assigns a meta conversion function to a meta type.
+     *
      * Conversion functions can be either free functions or member
      * functions.<br/>
      * In case of free functions, they must accept a const reference to an
